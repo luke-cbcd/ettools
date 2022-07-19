@@ -29,11 +29,6 @@ function clus = etCluster3D_meanShift(gaze, bandwidth, timeScale)
     t = (t ./ max(t)) * (gaze.Duration / timeScale);
     m_t = repmat(t, 1, gaze.NumSubjects);    
     
-    
-%     t = gaze.Time';
-%     t = (t ./ max(t)) * timeScaleFactor;
-%     m_t = repmat(t, 1, gaze.NumSubjects);
-    
     % format gaze and time for clustering
     m_gaze = [m_x; m_y; m_t];
     

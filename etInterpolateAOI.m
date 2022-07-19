@@ -1,4 +1,5 @@
-function [in, postInterpMissing] = etInterpolateAOI(in, gaze, maxS)
+function [in, postInterpMissing, postInterpX, postInterpY] =...
+    etInterpolateAOI(in, gaze, maxS)
     
 % validate inputs
 
@@ -32,6 +33,8 @@ function [in, postInterpMissing] = etInterpolateAOI(in, gaze, maxS)
     % post-interp missing vector (since we'll be filling in some missing
     % values in the AOI vector, it makes sense to at least record this)
     postInterpMissing = gaze.Missing;
+    postInterpX = gaze.X;
+    postInterpY = gaze.Y;
     
     % if all in, or all out, return
     if all(in(:)) || ~any(in(:))
@@ -88,9 +91,25 @@ function [in, postInterpMissing] = etInterpolateAOI(in, gaze, maxS)
             % fill in gaps
             for a = 1:numAOIs
                 if val(e, a)
-%                     in(ctm(e, 1):ctm(e, 2), s, a) = true;
+                    
+                    % fill in true values to 'in' AOI score vector
                     in(e1(e):e2(e), s, a) = true;
+                    
+                    % ensure that interpolated samples are not marked as
+                    % missing
                     postInterpMissing(e1(e):e2(e), s) = false;
+                    
+                    % interpolate gaze coords
+                    gx = gaze.X(e1(e):e2(e), s);
+                    gy = gaze.Y(e1(e):e2(e), s);
+                    gt = gaze.Time(e1(e):e2(e));
+                    xi = interp1([gt(1), gt(end)], [gx(1), gx(end)], gt);
+                    yi = interp1([gt(1), gt(end)], [gy(1), gy(end)], gt);
+                    
+                    % store
+                    postInterpX(e1(e):e2(e), s) = xi;
+                    postInterpY(e1(e):e2(e), s) = yi;
+                    
                 end        
             end
 

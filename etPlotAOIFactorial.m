@@ -355,7 +355,9 @@ function [tab_stats, fig_hist, fig_boxplot, res_t] =...
                 ax = gca;
                 ax.XRuler.Axle.LineWidth = axLineWidth;
                 ax.YRuler.Axle.LineWidth = axLineWidth; 
-                yl = [min(bar_mu - (bar_sem * 3)), max(bar_mu + (bar_sem *3))];
+                if ~any(isnan(bar_mu)) && ~any(isnan(bar_sem))
+                    yl = [min(bar_mu - (bar_sem * 3)), max(bar_mu + (bar_sem *3))];
+                end
                 % the matchBarYLim flag means we want the same y axis
                 % limits across all rows/cols. Otherwise we set the
                 % ylim for the current row & col (i.e. current plot)

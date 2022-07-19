@@ -3,13 +3,11 @@ classdef etGazeDataBino < etGazeData
     methods
         
 %         function obj = etGazeDataBino(varargin)
-%             
-%     
-%             
+%             obj = obj@etGazeData;
 %         end
     
         function obj = Import(obj, lx, ly, rx, ry, time, missingLeft,...
-                missingRight, absent)
+                missingRight, absent, timestamps)
         % import binocular gaze data  
         
         % check input args
@@ -80,6 +78,11 @@ classdef etGazeDataBino < etGazeData
             if ~val_size
                 error('Number of samples in gaze data (lx, ly, rx, ry, missing, absent) and time must match.')
             end
+            
+            % if timestamps are not specified, use time
+            if ~exist('timestamps', 'var') || isempty(timestamps)
+                timestamps = time;
+            end
 
         % directly store left/right x, y, missing, absent, time
         
@@ -88,6 +91,7 @@ classdef etGazeDataBino < etGazeData
             obj.RightX = rx;
             obj.RightY = ry;
             obj.Time = time;
+            obj.Timestamp = timestamps;
             obj.LeftMissing = missingLeft;
             obj.RightMissing = missingRight;
             obj.Absent = absent;
@@ -99,7 +103,7 @@ classdef etGazeDataBino < etGazeData
             
             % set .Missing to be samples where both left and right are
             % missing
-            obj.Missing = obj.LeftMissing & obj.RightMissing;
+            obj.prMissing = obj.LeftMissing & obj.RightMissing;
             
         end
         
@@ -144,7 +148,50 @@ classdef etGazeDataBino < etGazeData
             
         end
         
-        function val = horzcat(obj, varargin)
+        function buffer = ExportTaskEngine2(obj)
+            
+            buffer = nan(obj.NumSamples, 33);
+            
+            buffer(:, 1) = obj.Timestamp;
+            buffer(:, 2) = obj.LeftX;
+            buffer(:, 3) = obj.LeftY;
+            buffer(:, 4) = ~obj.LeftMissing;
+            if ~isempty(obj.LeftPupil)
+                buffer(:, 5) = obj.LeftPupil;
+                buffer(:, 6) = ~obj.LeftMissing;
+            else
+                buffer(:, 6) = false(obj.NumSamples, 1);
+            end
+            buffer(:, 16) = false(obj.NumSamples, 1);
+ 
+            buffer(:, 17) = obj.RightX;
+            buffer(:, 18) = obj.RightY;
+            buffer(:, 19) = ~obj.RightMissing;
+            if ~isempty(obj.RightPupil)
+                buffer(:, 20) = obj.RightPupil;
+                buffer(:, 21) = ~obj.RightMissing;
+            else
+                buffer(:, 21) = false(obj.NumSamples, 1);
+            end            
+            buffer(:, 31) = false(obj.NumSamples, 1);
+            buffer(:, 32) = obj.Timestamp;
+            buffer(:, 33) = obj.Timestamp;
+
+        end
+        
+        function [mb, tb, eb] = ExportTobiiAnalytics(obj)
+            buffer_te2 = obj.ExportTaskEngine2;
+            [mb, tb] = teConvertGaze(buffer_te2, [], 'taskengine2', 'tobiianalytics');
+            if istable(obj.Events) && ~isempty(obj.Events) &&...
+                    ismember('timestamp', obj.Events.Properties.VariableNames) &&...
+                    ismember('data', obj.Events.Properties.VariableNames)
+                eb = [num2cell([obj.Events.timestamp, obj.Events.timestamp]), obj.Events.data];
+            else
+                eb = [];
+            end
+        end
+        
+        function val = horzcat(~, varargin)
             
             numSubs = length(varargin);
             lens = cellfun(@(x) x.NumSamples, varargin);

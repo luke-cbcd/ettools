@@ -8,6 +8,7 @@ classdef etGazeData < dynamicprops
         RightX
         RightY
         Time
+        Timestamp
         LeftMissing
         RightMissing
         Absent
@@ -44,9 +45,11 @@ classdef etGazeData < dynamicprops
         MeanSampleRate
         HasGaze
         HasPupil
+        HasEvents
+        Calc
     end
     
-    properties (Access = protected)
+    properties (Access = protected)        
         prMissing
         prAddedVariables
     end
@@ -68,6 +71,7 @@ classdef etGazeData < dynamicprops
             parser.addParameter('mainBuffer', []);
             parser.addParameter('timeBuffer', []);
             parser.addParameter('eventBuffer', []);
+            parser.addParameter('te1_preproc', []);
             parser.addParameter('te2', []);
             parser.parse(varargin{:});
 
@@ -89,8 +93,8 @@ classdef etGazeData < dynamicprops
                     t_ev = double(cell2mat(eb(:, 2)) - eb{1, 2}) / 1e6;
                     tmp = etListEvents(eb);
                     lab_ev = tmp(2:end, 4);
-                    obj.Events = array2table(t_ev, 'VariableNames', {'Time'});
-                    obj.Events.Label = lab_ev;
+                    obj.Events = array2table(t_ev, 'VariableNames', {'timestamp'});
+                    obj.Events.data = lab_ev;
                 end
                 % import gaze
                 lx = mb(:, 7);
@@ -124,6 +128,41 @@ classdef etGazeData < dynamicprops
 
             end
             
+            % te1 preproc import
+            if ~isempty(parser.Results.te1_preproc)
+                data = parser.Results.te1_preproc;
+                % check data format
+                val_format =...
+                    isstruct(data) &&...
+                    hasField(data, 'ParticipantID');
+                if val_format 
+                    if hasField(data, 'Segmentation')
+                        data = renameStructField(data, 'Segmentation', 'Segments');
+                    end
+                    val_format = val_format && isstruct(data.Segments) &&...
+                        hasField(data.Segments, 'Segment') &&...
+                        hasField(data.Segments(1).Segment, 'MainBuffer') &&...
+                        hasField(data.Segments(1).Segment, 'TimeBuffer') &&...
+                        hasField(data.Segments(1).Segment, 'EventBuffer'); 
+                end
+                if ~val_format
+                    error('When using the ''te1_preproc'' option, the second argument must be a struct.')
+                end
+                % loop through segments
+                tmp = etGazeDataBino;
+                for s = 1:length(data.Segments)
+                    mb = data.Segments(s).MainBuffer;
+                    tb = data.Segments(s).TimeBuffer;
+                    eb = data.Segments(s).EventBuffer;
+                    tmp(s) = etGazeDataBino(...
+                        'mainBuffer', mb,...
+                        'timeBuffer', tb,...
+                        'eventBuffer', eb);
+                end
+                obj = tmp;
+            end
+                    
+            
             % te2 gaze import
             if ~isempty(parser.Results.te2)
                 buffer = parser.Results.te2;
@@ -137,7 +176,8 @@ classdef etGazeData < dynamicprops
                     missingL = ~buffer(:, 4);
                     missingR = ~buffer(:, 19);
                     time = buffer(:, 1) - buffer(1, 1);
-                    obj.Import(lx, ly, rx, ry, time, missingL, missingR);
+                    timestamps = buffer(:, 1);
+                    obj.Import(lx, ly, rx, ry, time, missingL, missingR, [], timestamps);
                 end
             end            
             
@@ -226,8 +266,8 @@ classdef etGazeData < dynamicprops
                     s1, s2, obj.NumSamples)
             end
             
-            if s1 >= s2
-                error('s1 must be less than s2.')
+            if s1 > s2
+                error('s1 must be less than or equal to s2.')
             end
         
             numSegs = length(s1);
@@ -263,14 +303,24 @@ classdef etGazeData < dynamicprops
                         obj.Time(idx, :) - obj.Time(idx(1), :),...  % zero time
                         obj.LeftMissing(idx, :),...
                         obj.RightMissing(idx, :),...
-                        obj.Absent(idx, :));
+                        obj.Absent(idx, :),...
+                        obj.Timestamp(idx, :));
                     if obj.HasPupil
                         val{s}.ImportPupil(...
                             obj.LeftPupil(idx, :),...
                             obj.RightPupil(idx, :),...
                             obj.PupilMissing(idx, :));
                     end
+                    
                 end        
+                
+                % segment events
+                if obj.HasEvents
+                    t1 = obj.Sample2Time(s1);
+                    t2 = obj.Sample2Time(s2);
+                    idx_ev = obj.Events.Time >= t1 & obj.Events.Time <= t2;
+                    val{s}.Events = obj.Events(idx_ev, :);
+                end
                 
                 % handle added variables
                 for v = 1:obj.prAddedVariables.Count
@@ -305,6 +355,17 @@ classdef etGazeData < dynamicprops
                 val = val{1};
             end
             
+        end
+        
+        function val = SegmentByTime(obj, t1, t2)
+        % takes two timestamps (t1, t2) representing the edges of the
+        % desired segment. Converts time to samples and then calls
+        % SegmentBySample to actually chop up the data
+        
+            s1 = obj.Time2Sample(t1);
+            s2 = obj.Time2Sample(t2);
+            val = obj.SegmentBySample(s1, s2);
+        
         end
         
         % dynamic props
@@ -349,8 +410,8 @@ classdef etGazeData < dynamicprops
                 x2 = ctt(i, 3);
                 y1 = 0.00;
                 y2 = 1.00;
-                rectangle('position', [x1, y1, x2, y2], 'FaceColor', [1, 0, 0, .1])
-                rectangle('position', [x1, 0.98, x2, 0.02], 'FaceColor', [1, 0, 0, .9])
+                rectangle('position', [x1, y1, x2, y2], 'FaceColor', [1, 0, 0, .1], 'EdgeColor', [1, 0, 0, .9])
+                rectangle('position', [x1, 0.98, x2, 0.02], 'FaceColor', [1, 0, 0, .9], 'EdgeColor', [1, 0, 0, .9])
             end
             
             % plot x, y
@@ -376,8 +437,12 @@ classdef etGazeData < dynamicprops
                 ty = 0;
                 for i = 1:size(obj.Events, 1)
                     ox = x;
-                    x = obj.Events.Time(i);
-                    lab = obj.Events.Label{i};
+                    x = obj.Events.timestamp(i);
+                    lab = obj.Events.data{i};
+                    if contains(lab, 'FRAME_CALC') ||...
+                       contains(lab, 'NATSCENES_FRAME')
+                        continue
+                    end
                     line([x, x], [0, 1], 'Color', 'w')
                     if ~isempty(tx)
                         moveDown = x < tx.Extent(1) + tx.Extent(3);
@@ -551,6 +616,33 @@ classdef etGazeData < dynamicprops
             
         end
         
+        % utils
+        function s = Time2Sample(obj, t)
+            if ~isscalar(t)
+                error('Timestamp must be scalar.')
+                % todo - make this not so
+            elseif t > obj.Duration
+                error('Requested timestamp %.2fs is greater than total duration (%.2fs)',...
+                    t, obj.Duration)
+            elseif t < 0 
+                error('Requested timestamp is negative.')
+            end
+            s = find(obj.Time >= t, 1);
+        end
+        
+        function t = Sample2Time(obj, s)
+            if ~isscalar(s)
+                error('Sample index must be scalar.')
+                % todo - make this not so
+            elseif s > obj.NumSamples
+                error('Requested sample index %d is greater than total number of samples (%d)',...
+                    s, obj.NumSamples)
+            elseif s < 0 
+                error('Requested timestamp is negative.')
+            end
+            t = obj.Time(s);
+        end
+        
         % get/set
         function val = get.Duration(obj)
             val = max(obj.Time);
@@ -692,6 +784,41 @@ classdef etGazeData < dynamicprops
             val = ~isempty(obj.Pupil);
         end
         
+        function val = get.HasEvents(obj)
+            val = ~isempty(obj.Events);
+        end
+        
+        function val = get.Calc(obj)
+            val = struct;
+            
+            % vel
+            ldx = [nan; diff(obj.LeftX)];
+            ldy = [nan; diff(obj.LeftY)];
+            rdx = [nan; diff(obj.RightX)];
+            rdy = [nan; diff(obj.RightY)];
+            vl = sqrt((ldx .^ 2) + (ldy .^ 2));
+            vr = sqrt((rdx .^ 2) + (rdy .^ 2));   
+            
+            % acc
+            al = [nan; diff(vl)];
+            ar = [nan; diff(vr)];
+            
+            % direction
+            dl = 180 + atan2d(ldy, ldx);
+            dr = 180 + atan2d(rdy, rdx);
+
+            val.VelocityLeft = vl;
+            val.VelocityRight = vr;
+            val.VelocityLeftNormalised = vl ./ max(vl);
+            val.VelocityRightNormalised = vr ./ max(vr);            
+            val.AccelerationLeft = al;
+            val.AccelerationRight = ar;
+            val.DirectionLeft = dl;
+            val.DirectionRight = dr;
+            
+        end
+
+        
         % overridden methods
         function m = double(obj)
             props = properties(obj);
@@ -736,6 +863,37 @@ classdef etGazeData < dynamicprops
 %             warning('This has changed')
 %             val = length(obj.X);
 %         end
+        
+    end
+    
+    methods (Hidden)
+        
+%         function [vl, vr] = calcVelocity(obj)
+%             ldx = [nan, diff(obj.LeftX)];
+%             ldy = [nan, diff(obj.LeftY)];
+%             rdx = [nan, diff(obj.RightX)];
+%             rdy = [nan, diff(obj.RightY)];
+%             vl = sqrt((ldx .^ 2) + (ldy .^ 2));
+%             vr = sqrt((rdx .^ 2) + (rdy .^ 2));
+%         end
+%         
+%         function acc = calcAcceleration(obj)
+%             [vl, vr] = obj.calcVelocity;
+%             
+%         end
+%         
+%         function dir = calcDirection(obj)
+%         end
+%         
+%         function [ld, rd] = calcDistances(obj)
+%             ldx = [nan, diff(obj.LeftX)];
+%             ldy = [nan, diff(obj.LeftY)];
+%             rdx = [nan, diff(obj.RightX)];
+%             rdy = [nan, diff(obj.RightY)];
+%             ld = sqrt((ldx .^ 2) + (ldy .^ 2));
+%             rd = sqrt((rdx .^ 2) + (rdy .^ 2));
+%         end
+            
         
     end
 %     

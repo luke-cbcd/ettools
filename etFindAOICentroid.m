@@ -8,6 +8,8 @@ function [cx, cy] = etFindAOICentroid(bin)
     w = size(bin, 2);
     h = size(bin, 1);
     
+    cx = nan(numAOIs, 1);
+    cy = nan(numAOIs, 1);
     for a = 1:numAOIs
         
         [y, x] = ndgrid(1:h, 1:w);

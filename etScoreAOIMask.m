@@ -1,6 +1,4 @@
-function [in, cols] = etScoreAOIMask(gaze, img, def, colourTolerance)
-
-% general setup
+function [in, cols, dist] = etScoreAOIMask(gaze, img, def, colourTolerance)
     
     % check gaze is a teGazeData instance
     if ~exist('gaze', 'var') || ~isa(gaze, 'etGazeData') || isempty(gaze)
@@ -28,8 +26,8 @@ function [in, cols] = etScoreAOIMask(gaze, img, def, colourTolerance)
     % pull time, coords and image data into local vars
     
         % get [x, y] coords
-        x = gaze.X;
-        y = gaze.Y;
+        gx = gaze.X;
+        gy = gaze.Y;
 
         % get image data
         w = size(img, 2);
@@ -44,8 +42,8 @@ function [in, cols] = etScoreAOIMask(gaze, img, def, colourTolerance)
 
     % get x, and y values
 
-        x = 1 + floor(x .* w);
-        y = 1 + floor(y .* h);
+        x = 1 + floor(gx .* w);
+        y = 1 + floor(gy .* h);
 
         % put x any y into tall vectors, to speed up pixel lookup by
         % avoiding a loop
@@ -130,8 +128,7 @@ function [in, cols] = etScoreAOIMask(gaze, img, def, colourTolerance)
     % reshape tall colour values into a [num samps x num subs x 3]
     % matrix
     cols = reshape(cols, gaze.NumSamples, gaze.NumSubjects, 3);
-
-    in = logical(in);
+    in = logical(in);    
     
 %     anyIn = any(shiftdim(in, 2)', 2);
 % %     anyIn = in(:, :, 3);

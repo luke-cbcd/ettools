@@ -6,23 +6,32 @@ function bin = etBinariseAOIMask(mask, def)
     bin = false(h, w, numAOIs);
     tol = 10;
     
-    for a = 1:numAOIs
+    mask = double(mask);
+    mask_r = mask(:, :, 1);
+    mask_g = mask(:, :, 2);
+    mask_b = mask(:, :, 3);
         
-        % find number of colours in aoi
-        numCols = length(def{a, 2});
+    for a = 1:numAOIs
+
+        % determine number of colours in this AOI
+        numCols = size(def{a, 2}, 2);
         for c = 1:numCols
+
+            % pull RGB values from the def
+            def_r = double(def{a, 2}{c}(1));
+            def_g = double(def{a, 2}{c}(2));
+            def_b = double(def{a, 2}{c}(3));
+
+            % compare against AOI pixel values
+            idx = ...
+                abs(mask_r - def_r) < tol &...
+                abs(mask_g - def_g) < tol &...
+                abs(mask_b - def_b) < tol;
             
-            % extract colour
-            col = def{a, 2}{1};
-            
-            % find aoi colours
-            idx = mask(:, :, 1) - col(1) < tol;
-            idx = idx & mask(:, :, 2) - col(2) < tol;
-            idx = idx & mask(:, :, 3) - col(3) < tol;
             bin(:, :, a) = bin(:, :, a) | idx;
             
         end
- 
-    end
+
+    end    
 
 end

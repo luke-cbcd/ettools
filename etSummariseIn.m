@@ -1,5 +1,5 @@
 function [smry, tab_tall, tab_wide, looks] = etSummariseIn(type, in, gaze,...
-    def, id, postInterpMissing)
+    def, id, postInterpMissing, dist)
 % This function is called by etSummariseAOI and etSummariseSalience. They
 % pass all inputs along with 'type' which is either 'aoi' or 'salience'. 
 
@@ -65,6 +65,12 @@ function [smry, tab_tall, tab_wide, looks] = etSummariseIn(type, in, gaze,...
         missing = postInterpMissing;
     end
     
+    % if no distance (to AOI centroid) is passed, set to NaN so output is
+    % also NaN
+    if ~exist('dist', 'var') || isempty(dist)
+        dist = nan(size(in));
+    end
+    
     % if 'looks' is asked for, we need to extract segments of gaze data
     % around each look and return these. This is done in etScoreAOILooks
     % and is slow, so only do it if asked
@@ -122,6 +128,7 @@ function [smry, tab_tall, tab_wide, looks] = etSummariseIn(type, in, gaze,...
                 smry{a, s}.firstTimeS = gaze.Time(smry{a, s}.firstSamp);
                 if isempty(smry{a, s}.firstTimeS), smry{a, s}.firstTimeS = inf; end
                 if isempty(smry{a, s}.firstSamp), smry{a, s}.firstSamp = inf; end
+                smry{a, s}.meanDistance = nanmean(dist(:, s, a));
 
             elseif isSal
                 
@@ -135,6 +142,13 @@ function [smry, tab_tall, tab_wide, looks] = etSummariseIn(type, in, gaze,...
             
             % store time vector
             smry{a, s}.time = gaze.Time;
+            
+            % store distance vector
+            if ~isempty(dist)
+                smry{a, s}.distance = dist(:, s, a);
+            else
+                smry{a, s}.distance = [];
+            end
 
         end
         
@@ -164,11 +178,15 @@ function [smry, tab_tall, tab_wide, looks] = etSummariseIn(type, in, gaze,...
         end
 
         % make table of results
-        smry_tmp = rmfield(smry_sub, {'in', 'time'});
+        smry_tmp = rmfield(smry_sub, {'in', 'time', 'distance'});
         tab_tmp_tall{s} = struct2table(smry_tmp, 'AsArray', true);
 
         % calculate duration of non-absent data
-        dataDur = max(gaze.Time(~gaze.Absent(:, s)));
+        if all(gaze.Absent(:, s))
+            dataDur = 0;
+        else
+            dataDur = max(gaze.Time(~gaze.Absent(:, s)));
+        end
         tab_tmp_tall{s}.dataDuration =...
             repmat(dataDur, size(tab_tmp_tall{s}, 1), 1);
             
@@ -181,7 +199,7 @@ function [smry, tab_tall, tab_wide, looks] = etSummariseIn(type, in, gaze,...
         
         for a = 1:numAOIs
             
-            smry_tmp = rmfield(smry{a, s}, {'in', 'time'});
+            smry_tmp = rmfield(smry{a, s}, {'in', 'time', 'distance'});
             aoiName = smry_tmp.aoi;
             
             % store AOI name, then remove unwanted fields
